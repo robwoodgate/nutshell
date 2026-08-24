@@ -813,14 +813,15 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
     assert response1.state == "PAID"
 
-    assert_err(
+    await assert_err(
         wallet.melt(
             proofs=proofs2,
             invoice=invoice,
             fee_reserve_sat=melt_quote2.fee_reserve,
             quote_id=melt_quote2.quote,
         ),
-        "Melt quote already paid or pending.",
+        # wallet.melt wraps the mint's 11000 detail
+        "could not pay invoice: Mint Error: Melt quote already paid or pending. (Code: 11000)",
     )
 
 
