@@ -40,6 +40,10 @@
 - Do not use `assert` in production code. Use explicit validation and raise an
   appropriate exception when an invariant can fail.
 
+### Line endings
+
+- Use LF line endings for all text files. The repository's `.gitattributes` enforces this convention; do not commit CRLF or mixed line endings.
+
 ### Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

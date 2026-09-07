@@ -62,7 +62,7 @@ jobs:
             echo
             echo '| Status | Count |'
             echo '|---|---:|'
-            for status in killed survived "no tests" timeout suspicious skipped; do
+            for status in killed survived "no tests" timeout suspicious skipped "not checked"; do
               count=$(awk -F ': ' -v status="$status" \
                 '$NF == status { count++ } END { print count + 0 }' "$results_file")
               echo "| $status | $count |"

@@ -13,9 +13,11 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.errors import (
+    InvoiceAlreadyPaidError,
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
     OutputsArePendingError,
+    QuotePendingError,
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.nuts import nut20
@@ -635,8 +637,6 @@ async def test_set_melt_quote_pending_without_checking_id(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Ledger):
     """Test that setting a melt quote as pending fails if another quote with same checking_id is already pending."""
-    from cashu.core.errors import TransactionError
-
     checking_id = "test_checking_id_duplicate"
 
     quote1 = MeltQuote(
@@ -675,9 +675,10 @@ async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Led
     # Attempt to set the second quote as pending should fail
     try:
         await ledger.db_write._set_melt_quote_pending(quote=quote2)
-        raise AssertionError("Expected TransactionError")
-    except TransactionError as e:
+        raise AssertionError("Expected QuotePendingError")
+    except QuotePendingError as e:
         assert "Melt quote already paid or pending." in str(e)
+        assert e.code == 20005
 
     # Verify the second quote is still unpaid
     quote2_db = await ledger.crud.get_melt_quote(
@@ -1032,3 +1033,24 @@ async def test_melt_early_return_leaves_no_orphan_blank_outputs(
         f"Expected no orphan blank outputs for melt {melt_quote.quote}, "
         f"got {len(orphans)} with B_s {[o.B_ for o in orphans]}"
     )
+
+
+@pytest.mark.asyncio
+async def test_prepare_melt_rejects_already_paid_quote(ledger: Ledger):
+    """_prepare_melt runs before the locked guard, so it must report the paid
+    state with its own code rather than a generic transaction error."""
+    quote = MeltQuote(
+        quote="quote_id_already_paid",
+        method="bolt11",
+        request="lnbcfake",
+        checking_id="checking_id_already_paid",
+        unit="sat",
+        state=MeltQuoteState.paid,
+        amount=100,
+        fee_reserve=1,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+
+    with pytest.raises(InvoiceAlreadyPaidError) as exc_info:
+        await ledger._prepare_melt(proofs=[], quote=quote.quote)
+    assert exc_info.value.code == 20006

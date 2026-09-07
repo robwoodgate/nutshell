@@ -6,7 +6,7 @@ import pytest_asyncio
 from fastapi import WebSocket
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
-from cashu.core.errors import ProofsArePendingError
+from cashu.core.errors import ProofsArePendingError, QuoteAlreadyIssuedError
 from cashu.core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
@@ -206,6 +206,26 @@ async def test_melt_quote_state_transitions(wallet: Wallet, ledger: Ledger):
         set_state(quote, MeltQuoteState.pending),
         "Cannot change state of a paid melt quote.",
     )
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_set_pending_rejects_issued_quote(
+    wallet: Wallet, ledger: Ledger
+):
+    """An issued quote is neither pending nor paid, so the locked guard must not
+    fall through to QuoteNotPaidError."""
+    mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    _ = await ledger.get_mint_quote(mint_quote.quote)
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote is not None
+    quote.state = MintQuoteState.issued
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    with pytest.raises(QuoteAlreadyIssuedError) as exc_info:
+        await ledger.db_write._set_mint_quote_pending(quote.quote)
+    assert exc_info.value.code == 20002
 
 
 @pytest.mark.asyncio

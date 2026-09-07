@@ -27,10 +27,10 @@ append_unavailable_profile() {
     local run_url=${2:-}
 
     if [[ -n "$run_url" ]]; then
-        echo "| [${profile}](${run_url}) | unavailable | - | - | - | - | - |" \
+        echo "| [${profile}](${run_url}) | unavailable | - | - | - | - | - | - |" \
             >> "$BODY_FILE"
     else
-        echo "| ${profile} | unavailable | - | - | - | - | - |" >> "$BODY_FILE"
+        echo "| ${profile} | unavailable | - | - | - | - | - | - |" >> "$BODY_FILE"
     fi
     incomplete_profiles=$((incomplete_profiles + 1))
 }
@@ -45,7 +45,7 @@ collect_profile() {
         --workflow "$workflow" \
         --event schedule \
         --limit 1 \
-        --json databaseId,createdAt,url \
+        --json databaseId,createdAt,url,conclusion \
         --jq '.[0] // empty'); then
         append_unavailable_profile "$profile"
         return
@@ -56,13 +56,19 @@ collect_profile() {
         return
     fi
 
-    local run_id run_date run_url
+    local run_id run_date run_url run_conclusion
     run_id=$(jq -r '.databaseId' <<< "$run_data")
     run_date=$(jq -r '.createdAt' <<< "$run_data")
     run_url=$(jq -r '.url' <<< "$run_data")
+    run_conclusion=$(jq -r '.conclusion' <<< "$run_data")
+
+    if [[ "$run_conclusion" != "success" ]]; then
+        append_unavailable_profile "$profile" "$run_url"
+        return
+    fi
 
     if (( $(date -u -d "$run_date" +%s) < $(date -u -d '8 days ago' +%s) )); then
-        echo "| [${profile}](${run_url}) | stale | - | - | - | - | - |" >> "$BODY_FILE"
+        echo "| [${profile}](${run_url}) | stale | - | - | - | - | - | - |" >> "$BODY_FILE"
         incomplete_profiles=$((incomplete_profiles + 1))
         return
     fi
@@ -85,16 +91,17 @@ collect_profile() {
         return
     fi
 
-    local killed survived no_tests timeout suspicious skipped
+    local killed survived no_tests timeout suspicious skipped not_checked
     killed=$(count_status "$results_file" killed)
     survived=$(count_status "$results_file" survived)
     no_tests=$(count_status "$results_file" "no tests")
     timeout=$(count_status "$results_file" timeout)
     suspicious=$(count_status "$results_file" suspicious)
     skipped=$(count_status "$results_file" skipped)
-    total_actionable=$((total_actionable + survived + no_tests + timeout + suspicious))
+    not_checked=$(count_status "$results_file" "not checked")
+    total_actionable=$((total_actionable + survived + no_tests + timeout + suspicious + not_checked))
 
-    echo "| [${profile}](${run_url}) | ${killed} | ${survived} | ${no_tests} | ${timeout} | ${suspicious} | ${skipped} |" \
+    echo "| [${profile}](${run_url}) | ${killed} | ${survived} | ${no_tests} | ${timeout} | ${suspicious} | ${skipped} | ${not_checked} |" \
         >> "$BODY_FILE"
 }
 
@@ -173,8 +180,8 @@ fi
     echo
     echo "Report date: ${REPORT_DATE}"
     echo
-    echo "| Profile | Killed | Survived | No tests | Timeout | Suspicious | Skipped |"
-    echo "|---|---:|---:|---:|---:|---:|---:|"
+    echo "| Profile | Killed | Survived | No tests | Timeout | Suspicious | Skipped | Not checked |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|"
 } > "$BODY_FILE"
 
 for profile in "${PROFILES[@]}"; do
