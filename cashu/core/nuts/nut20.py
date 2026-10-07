@@ -1,5 +1,5 @@
 from hashlib import sha256
-from typing import List
+from typing import List, Optional
 
 from coincurve import PublicKeyXOnly
 from loguru import logger
@@ -12,6 +12,7 @@ from ..crypto.nutroot import (
 )
 from ..crypto.secp import PrivateKey, PublicKey
 from ..crypto.transcript import (
+    InputContext,
     TransactionShape,
     TranscriptBlindedOutput,
     TranscriptQuote,
@@ -105,6 +106,13 @@ def construct_batch_transaction_message(
     shared transcript covers every quote input (quote_id, amount) in request
     order plus all blinded outputs, and each quote's witness signs its own
     input digest over it (NUT-10)."""
+    return quote_input_context(quotes, outputs, for_quote_id).digest
+
+
+def quote_input_context(
+    quotes: List[tuple], outputs: List[BlindedMessage], for_quote_id: str
+) -> InputContext:
+    """Quote `for_quote_id`'s signing context in a (batch) mint transaction."""
     _, _, quote_contexts = transaction_inputs(
         TransactionShape(
             mint_quote_inputs=[
@@ -123,7 +131,7 @@ def construct_batch_transaction_message(
     )
     if for_quote_id not in quote_contexts:
         raise ValueError("quote is not an input of this transaction")
-    return quote_contexts[for_quote_id].digest
+    return quote_contexts[for_quote_id]
 
 
 def sign_mint_quote_v3(
@@ -147,17 +155,22 @@ def verify_mint_quote_v3(
     or script path ({"leaf", "control", ...}) against the quote lock point.
     For batch mints, pass every quote as `batch_quotes`; the shared transcript
     covers them all and `quote_id` selects this quote's input digest."""
-    digest = construct_batch_transaction_message(
+    context = quote_input_context(
         batch_quotes if batch_quotes is not None else [(quote_id, amount)],
         outputs,
         quote_id,
     )
-    return verify_quote_input_witness(digest, public_key, signature)
+    return verify_quote_input_witness(
+        context.digest, public_key, signature, context.outputs
+    )
 
 
-def verify_quote_input_witness(digest: bytes, public_key: str, signature: str) -> bool:
+def verify_quote_input_witness(
+    digest: bytes, public_key: str, signature: str, outputs: Optional[bytes] = None
+) -> bool:
     """Verify a quote input witness over its input digest: key path (hex sig
-    or {"signatures"}) or script path, against the quote lock point."""
+    or {"signatures"}) or script path, against the quote lock point. `outputs`
+    is the transcript's output section, needed to evaluate a template leaf."""
     witness: NutrootWitness | None = None
     if signature.strip().startswith("{"):
         try:
@@ -167,7 +180,7 @@ def verify_quote_input_witness(digest: bytes, public_key: str, signature: str) -
     if witness is not None and witness.is_script_path:
         try:
             verify_script_path_spend(
-                PublicKey(bytes.fromhex(public_key)), digest, witness
+                PublicKey(bytes.fromhex(public_key)), digest, witness, outputs=outputs
             )
             return True
         except Exception:
