@@ -88,24 +88,24 @@ def _proof_input_container(p: TranscriptProofInput) -> bytes:
     )
 
 
-def _quote_container(
-    container_type: int, q: TranscriptQuote, fields: bytes = b""
-) -> bytes:
+def _quote_fields(q: TranscriptQuote) -> bytes:
+    """Fields 01 amount and 02 quote id, shared by the mint quote input and melt quote output."""
     if not q.quote_id:
         raise ValueError("Transcript quote id must be non-empty")
-    return tlv_record(
-        container_type,
-        _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8")) + fields,
-    )
+    return _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8"))
 
 
 def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
     # The container commits the lock key, so an offline co-signer can tell which key the input needs.
     if q.pubkey is None or len(q.pubkey) != 33:
         raise ValueError("Transcript mint quote input needs its 33-byte lock key")
-    return _quote_container(
-        _CONTAINER_MINT_QUOTE_INPUT, q, tlv_record(0x03, q.pubkey)
+    return tlv_record(
+        _CONTAINER_MINT_QUOTE_INPUT, _quote_fields(q) + tlv_record(0x03, q.pubkey)
     )
+
+
+def _melt_quote_output_container(q: TranscriptQuote) -> bytes:
+    return tlv_record(_CONTAINER_MELT_QUOTE_OUTPUT, _quote_fields(q))
 
 
 def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
@@ -144,10 +144,7 @@ def output_section(tx: TransactionShape) -> bytes:
     """The transcript's output section (its 0x2n containers), which a template leaf hashes."""
     return (
         b"".join(_blinded_output_container(o) for o in (tx.blinded_outputs or []))
-        + b"".join(
-            _quote_container(_CONTAINER_MELT_QUOTE_OUTPUT, q)
-            for q in (tx.melt_quote_outputs or [])
-        )
+        + b"".join(_melt_quote_output_container(q) for q in (tx.melt_quote_outputs or []))
         + b"".join(_change_output_container(c) for c in (tx.change_quote_outputs or []))
     )
 
