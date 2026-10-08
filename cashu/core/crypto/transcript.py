@@ -144,7 +144,9 @@ def output_section(tx: TransactionShape) -> bytes:
     """The transcript's output section (its 0x2n containers), which a template leaf hashes."""
     return (
         b"".join(_blinded_output_container(o) for o in (tx.blinded_outputs or []))
-        + b"".join(_melt_quote_output_container(q) for q in (tx.melt_quote_outputs or []))
+        + b"".join(
+            _melt_quote_output_container(q) for q in (tx.melt_quote_outputs or [])
+        )
         + b"".join(_change_output_container(c) for c in (tx.change_quote_outputs or []))
     )
 
