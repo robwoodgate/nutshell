@@ -761,6 +761,18 @@ def test_mint_verifies_nutroot_transaction_witnesses():
     verify(proofs, outputs)
 
 
+def test_quote_witness_with_malformed_lock_key_is_invalid():
+    from cashu.core.nuts import nut20
+
+    privkey, _ = nut20.generate_keypair()
+    _, _, outputs = _swap_vector_proofs_and_outputs()
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
+    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig)
+    assert not nut20.verify_mint_quote_v3(
+        "qid", 8, outputs, "02" + "00" * 32, sig, batch_quotes=[("qid", 8, "")]
+    )
+
+
 def test_quote_key_path_witness_takes_exactly_one_signature():
     from cashu.core.nuts import nut20
 
@@ -773,18 +785,6 @@ def test_quote_key_path_witness_takes_exactly_one_signature():
     )
     assert not nut20.verify_mint_quote_v3(
         "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]})
-    )
-
-
-def test_quote_witness_with_malformed_lock_key_is_invalid():
-    from cashu.core.nuts import nut20
-
-    privkey, _ = nut20.generate_keypair()
-    _, _, outputs = _swap_vector_proofs_and_outputs()
-    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
-    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig)
-    assert not nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, "02" + "00" * 32, sig, batch_quotes=[("qid", 8, "")]
     )
 
 
