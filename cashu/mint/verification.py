@@ -31,10 +31,10 @@ from ..core.crypto.transcript import (
     InputContext,
     TransactionShape,
     TranscriptBlindedOutput,
-    TranscriptChangeOutput,
+    TranscriptMintQuoteOutput,
     TranscriptProofInput,
     TranscriptQuote,
-    change_quote_ids,
+    mint_quote_ids,
     transaction_inputs,
 )
 from ..core.db import Connection
@@ -276,7 +276,7 @@ class LedgerVerification(
         outputs: List[BlindedMessage],
         melt_quote: Optional[MeltQuote] = None,
         mint_quote_inputs: Optional[List[TranscriptQuote]] = None,
-        change_quote_outputs: Optional[List[TranscriptChangeOutput]] = None,
+        mint_quote_outputs: Optional[List[TranscriptMintQuoteOutput]] = None,
     ) -> Optional[Tuple[bytes, Dict[str, InputContext], List[str]]]:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
@@ -289,7 +289,7 @@ class LedgerVerification(
         transactions verify per input as specified.
 
         Passing `mint_quote_inputs` (NUT-XX) always builds the transcript and
-        returns its digest, the quote contexts and the change quote ids; the
+        returns its digest, the quote contexts and the txout quote ids; the
         caller checks quotes.
         """
         if mint_quote_inputs is None:
@@ -330,7 +330,7 @@ class LedgerVerification(
                 if melt_quote is not None
                 else None
             ),
-            change_quote_outputs=change_quote_outputs,
+            mint_quote_outputs=mint_quote_outputs,
         )
         digest_, proof_contexts, quote_contexts = transaction_inputs(shape)
         for proof in proofs:
@@ -374,7 +374,7 @@ class LedgerVerification(
                 raise TransactionError("invalid nutroot transaction witness.")
             if not valid:
                 raise TransactionError("invalid nutroot transaction witness.")
-        return digest_, quote_contexts, change_quote_ids(shape)
+        return digest_, quote_contexts, mint_quote_ids(shape)
 
     def _verify_inputs_and_outputs_together(
         self,
